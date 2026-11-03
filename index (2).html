@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Pemindai QR Absensi Nurul Huda</title>
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  <style>
+    :root{--navy:#173b66;--bg:#f3f6fb;--line:#dce5ef;--ink:#152a41;--muted:#61738a;--green:#167a46;--red:#a92e26}
+    *{box-sizing:border-box}body{margin:0;background:var(--bg);font-family:Arial,sans-serif;color:var(--ink)}.wrap{max-width:540px;margin:0 auto;padding:18px}.card{background:white;border:1px solid var(--line);border-radius:18px;padding:18px;box-shadow:0 10px 30px rgba(20,52,86,.08)}h1{font-size:20px;margin:0 0 6px}.muted{font-size:12px;color:var(--muted);line-height:1.5}.reader{margin:16px 0;background:#101f31;border-radius:14px;overflow:hidden;min-height:250px;padding:10px}#reader{width:100%}#reader video{border-radius:8px}button{border:0;border-radius:11px;background:var(--navy);color:white;font-size:14px;font-weight:bold;padding:13px;width:100%;margin-top:8px}button.secondary{background:#e7eef7;color:var(--navy)}.status{padding:12px;border-radius:11px;background:#eef3f9;color:var(--muted);font-size:13px;line-height:1.45;margin-top:12px}.status.ok{background:#e7f7ee;color:var(--green)}.status.bad{background:#ffefed;color:var(--red)}.foot{font-size:11px;color:var(--muted);margin-top:14px;text-align:center}
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <section class="card">
+      <h1>📷 Pemindai QR Ekstrakurikuler</h1>
+      <div class="muted">Gunakan kamera belakang HP. Arahkan ke satu kartu QR siswa setiap kali scan. Hasil akan dikirim ke tab aplikasi absensi yang membukanya.</div>
+      <div class="reader"><div id="reader"></div></div>
+      <button id="startBtn" onclick="startCamera()">Mulai Kamera</button>
+      <button id="stopBtn" class="secondary" onclick="stopCamera()" disabled>Matikan Kamera</button>
+      <div id="status" class="status">Tekan Mulai Kamera dan izinkan akses kamera ketika browser bertanya.</div>
+      <div class="foot">Jangan memindai kartu dari foto/layar. Cocokkan kartu dengan siswa yang hadir secara langsung.</div>
+    </section>
+  </main>
+  <script>
+    let qrScanner=null, busy=false, lastText='', lastAt=0;
+    function setStatus(msg,kind){const el=document.getElementById('status');el.textContent=msg;el.className='status'+(kind?' '+kind:'');}
+    async function startCamera(){
+      if(!window.Html5Qrcode){setStatus('Library QR tidak berhasil dimuat. Periksa koneksi internet.','bad');return;}
+      try{
+        qrScanner=new Html5Qrcode('reader');
+        await qrScanner.start({facingMode:'environment'},{fps:10,qrbox:{width:240,height:240},aspectRatio:1.0},decoded=>{
+          const now=Date.now();if(busy||(decoded===lastText&&now-lastAt<1800))return;
+          busy=true;lastText=decoded;lastAt=now;
+          if(window.opener&&!window.opener.closed){
+            window.opener.postMessage({type:'NHQR_SCAN',text:decoded},'*');
+            setStatus('QR terbaca dan dikirim. Tunggu respons aplikasi absensi...','ok');
+          }else{
+            setStatus('Aplikasi absensi tidak ditemukan. Buka halaman scanner dari tombol di aplikasi absensi.','bad');
+          }
+          setTimeout(()=>{busy=false;},1400);
+        });
+        document.getElementById('startBtn').disabled=true;document.getElementById('stopBtn').disabled=false;
+        setStatus('Kamera aktif. Pindai kartu QR siswa.','ok');
+      }catch(e){setStatus('Kamera gagal dibuka: '+e.message+'. Pastikan memakai HTTPS dan izinkan akses kamera.','bad');qrScanner=null;}
+    }
+    async function stopCamera(){if(qrScanner){try{if(qrScanner.isScanning)await qrScanner.stop();qrScanner.clear();}catch(e){}qrScanner=null;}document.getElementById('startBtn').disabled=false;document.getElementById('stopBtn').disabled=true;setStatus('Kamera dimatikan.');}
+    window.addEventListener('message',event=>{
+      if(!event.data||event.data.type!=='NHQR_SCAN_FEEDBACK')return;
+      setStatus(event.data.message||'Pemindaian diproses.',event.data.ok?'ok':'bad');
+    });
+    window.addEventListener('beforeunload',()=>{try{if(qrScanner&&qrScanner.isScanning)qrScanner.stop();}catch(e){}});
+  </script>
+</body>
+</html>
